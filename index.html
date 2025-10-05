@@ -1,0 +1,354 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asteroid Impact Simulator</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500&display=swap" rel="stylesheet">
+<style>
+body {
+    font-family: 'Orbitron', sans-serif;
+    margin: 0;
+    background: radial-gradient(circle at top, #0a0f24, #000);
+    color: #f0f0f0;
+}
+h1, h2, h3 { text-align: center; color: #fff; }
+.info-section, form, #results {
+    background: rgba(0,0,0,0.7);
+    padding: 20px;
+    border-radius: 15px;
+    margin: 20px auto;
+    max-width: 900px;
+}
+label { display:block; margin:10px 0 5px; font-weight:bold; }
+input, button {
+    padding:10px;
+    margin:5px 0;
+    border:none;
+    border-radius:8px;
+    font-size:1rem;
+}
+input { width: 220px; }
+button { cursor:pointer; transition:0.3s; color:#fff; }
+button:hover { transform:scale(1.05); box-shadow:0 0 15px rgba(0,255,150,0.8); }
+#sim-btn { background: #4CAF50; padding: 10px 20px; }
+#mitigate-btn { background: #2196F3; padding: 10px 20px; }
+#map { height:500px; width:90%; max-width:1000px; margin:0 auto; border:2px solid #333; border-radius:15px; }
+.result-card {
+    padding:10px;
+    border-radius:10px;
+    margin-top:10px;
+    font-weight:bold;
+    text-align:center;
+}
+.danger { background: rgba(255,0,0,0.3); border:1px solid red; color:#fff; }
+.medium { background: rgba(255,165,0,0.3); border:1px solid orange; color:#fff; }
+.low { background: rgba(0,255,0,0.3); border:1px solid lime; color:#000; }
+#fact-box {
+    background: rgba(0,255,255,0.2);
+    border:1px solid #0ff;
+    border-radius:10px;
+    padding:15px;
+    text-align:center;
+    margin-top:10px;
+    font-style:italic;
+    color:#fff;
+}
+ul { line-height: 1.6; }
+.meteor-trail {
+    box-shadow: 0 0 10px orange, 0 0 20px red;
+}
+
+/* Parameter table glow animation */
+@keyframes glowTable {
+    0% { box-shadow: 0 0 5px rgba(255, 215, 0, 0.4); }
+    50% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.8); }
+    100% { box-shadow: 0 0 5px rgba(255, 215, 0, 0.4); }
+}
+#meteor-parameters tbody tr:hover {
+    background-color: rgba(255, 215, 0, 0.1);
+    transition: background-color 0.3s ease;
+}
+</style>
+</head>
+<body>
+
+<div class="info-section">
+    <h2>What Happens When a Meteor Hits Earth?</h2>
+    <p>Meteors are more than just streaks of light in the night sky. When one makes it all the way to Earth, the results can be dramatic—or even catastrophic. The damage depends on a mix of surprising factors.</p>
+    <h3>Here’s what really matters:</h3>
+    <ul>
+        <li><strong>Size & Speed:</strong> Bigger and faster meteors hit harder, releasing massive energy.</li>
+        <li><strong>Angle of Entry:</strong> A steep dive can punch deep into the ground, while a shallow angle might cause an explosion in the sky.</li>
+        <li><strong>What It’s Made Of:</strong> Rocky meteors often break apart before impact. Metallic ones are tougher and more destructive.</li>
+        <li><strong>Where It Lands:</strong> An ocean impact could trigger tsunamis. A land strike might cause shockwaves, fires, or even global climate effects.</li>
+        <li><strong>Atmospheric Effects:</strong> Some meteors explode mid-air, creating powerful shockwaves without ever touching the ground.</li>
+        <li><strong>Environmental Fallout:</strong> Big impacts can throw dust into the atmosphere, blocking sunlight and cooling the planet—sometimes for years.</li>
+    </ul>
+</div>
+
+<h1>🌌 Impactor 2025 Simulator</h1>
+<p style="text-align:center;">Enter details below to simulate an asteroid impact and try mitigation!</p>
+
+<form id="sim-form">
+    <label for="size">Asteroid Size (meters diameter):</label>
+    <input type="number" id="size" value="50" min="1" max="10000" required>
+
+    <label for="speed">Speed (km/s):</label>
+    <input type="number" id="speed" value="20" min="1" max="70" step="0.1" required>
+
+    <label for="angle">Angle of Entry (degrees):</label>
+    <input type="number" id="angle" value="45" min="0" max="90" step="1" required>
+
+    <label for="deflection">Deflection Timing (seconds before impact):</label>
+    <input type="number" id="deflection" value="0" min="0" step="1">
+
+    <label for="density">Atmospheric Density (kg/m³):</label>
+    <input type="number" id="density" value="1.225" step="0.01">
+
+    <label for="lat">Impact Latitude:</label>
+    <input type="number" id="lat" value="40.7" step="any" required>
+
+    <label for="lon">Impact Longitude:</label>
+    <input type="number" id="lon" value="-74" step="any" required>
+
+    <label for="distance">Distance from Impact (km):</label>
+    <input type="number" id="distance" value="50" min="1" step="any" required>
+
+    <button type="button" id="sim-btn" onclick="simulateImpact()">Simulate Impact</button>
+    <button type="button" id="mitigate-btn" onclick="applyMitigation()" style="display:none;">Apply Mitigation</button>
+</form>
+
+<div id="map"></div>
+<div id="results"></div>
+
+<!-- Meteor Impact Parameters Table -->
+<section id="meteor-parameters" style="color:white; padding:20px; background-color: rgba(0,0,0,0.85); margin:20px auto; border-radius:15px; max-width:900px; box-shadow: 0 0 20px rgba(255, 215, 0, 0.7);">
+  <h2 style="text-align:center; color:#FFD700; text-shadow: 0 0 10px #FFD700;">Meteor Impact Parameters</h2>
+  <table style="width:100%; border-collapse:collapse; margin-top:20px; text-align:left; animation: glowTable 2s ease-in-out infinite alternate;">
+    <thead>
+      <tr style="border-bottom:2px solid #FFD700;">
+        <th style="padding:12px; color:#FFD700;">Parameter</th>
+        <th style="padding:12px; color:#FFD700;">Meaning</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding:10px;">Eccentricity (e)</td><td style="padding:10px;">How stretched or circular the orbit is (0 = circle, close to 1 = very elongated)</td></tr>
+      <tr><td style="padding:10px;">Semi-Major Axis (a)</td><td style="padding:10px;">Size of the orbit; half of the longest distance across the orbit</td></tr>
+      <tr><td style="padding:10px;">Impact Location</td><td style="padding:10px;">Latitude and longitude where the meteor hits</td></tr>
+      <tr><td style="padding:10px;">Distance from Impact</td><td style="padding:10px;">How far you are from the impact point</td></tr>
+      <tr><td style="padding:10px;">Estimated Blast Radius</td><td style="padding:10px;">Area around impact affected by explosion and shockwave</td></tr>
+      <tr><td style="padding:10px;">Energy Before Atmospheric Entry</td><td style="padding:10px;">Total energy the meteor has before entering atmosphere (atmospheric entry)</td></tr>
+      <tr><td style="padding:10px;">Breakup Starts At</td><td style="padding:10px;">Altitude where the meteor begins breaking apart</td></tr>
+      <tr><td style="padding:10px;">Breakup Altitude</td><td style="padding:10px;">Height where the meteor fully explodes (airburst)</td></tr>
+      <tr><td style="padding:10px;">Energy of Airburst</td><td style="padding:10px;">Energy released during atmospheric explosion (airburst)</td></tr>
+      <tr><td style="padding:10px;">Crater Size (if formed)</td><td style="padding:10px;">Diameter of crater if meteor hits ground (may be negligible if airburst)</td></tr>
+      <tr><td style="padding:10px;">Sound Level at Your Distance</td><td style="padding:10px;">Loudness of the explosion at your location</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- Updated Did You Know Section -->
+<section id="did-you-know" style="color:white; padding:20px; background-color: rgba(0,0,0,0.85); margin:20px auto; border-radius:15px; max-width:900px; box-shadow: 0 0 15px rgba(255, 69, 0, 0.7);">
+  <h2 style="text-align:center; color:#FF4500; text-shadow: 0 0 10px #FF4500;">💡 Did You Know?</h2>
+  <ul style="margin-top:20px; line-height:1.8; list-style-type:circle; padding-left: 20px;">
+    <li>The Chelyabinsk meteor in 2013 exploded with 30 times the energy of Hiroshima — yet never touched the ground.</li>
+    <li>Most meteors are only the size of a grain of sand—but they glow brightly because they’re moving extremely fast (up to 70 km per second!).</li>
+    <li>Earth gets hit all the time. About 17 meteors enter Earth’s atmosphere every hour. Most burn up completely before reaching the ground.</li>
+    <li>Meteor showers repeat every year. Each shower happens when Earth passes through the same debris trail of a comet—like the Perseids, Geminids, and Leonids.</li>
+    <li>The Hoba meteorite in Namibia weighs about 60 tons—the biggest ever found!</li>
+  </ul>
+</section>
+
+<script>
+// Initialize map
+const map = L.map('map').setView([40.7, -74], 5);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+let impactMarker, blastCircle, meteorLayer;
+let originalSpeed = 0;
+let currentResults = null;
+
+// Meteor animation
+function animateMeteor(startLat, startLon, endLat, endLon, duration=3000){
+    if(meteorLayer) map.removeLayer(meteorLayer);
+    meteorLayer=L.circleMarker([startLat, startLon],{
+        radius:8,
+        color:'orange',
+        fillColor:'red',
+        fillOpacity:0.9,
+        className:'meteor-trail'
+    }).addTo(map);
+
+    let startTime=null;
+    function step(timestamp){
+        if(!startTime) startTime=timestamp;
+        const progress=Math.min((timestamp-startTime)/duration,1);
+        const currentLat=startLat+(endLat-startLat)*progress;
+        const currentLon=startLon+(endLon-startLon)*progress;
+        meteorLayer.setLatLng([currentLat,currentLon]);
+        meteorLayer.setRadius(8*(1-progress*0.5));
+        meteorLayer.setStyle({opacity:1-progress, fillOpacity:1-progress});
+
+        if(progress<1) requestAnimationFrame(step);
+        else{
+            meteorLayer.setStyle({opacity:0, fillOpacity:0});
+            setTimeout(()=>{if(meteorLayer) map.removeLayer(meteorLayer); meteorLayer=null;
+            animateBlast(endLat,endLon,currentResults.radius); showResultsFromData(currentResults);},500);
+        }
+    }
+    requestAnimationFrame(step);
+}
+
+// Blast circle animation — expands fully and stays visible
+function animateBlast(lat, lon, maxRadius, duration=2000){
+    if(blastCircle) map.removeLayer(blastCircle);
+    const initialRadius = 50; // start small
+    blastCircle = L.circle([lat, lon],{
+        color:'red',
+        fillColor:'#f03',
+        fillOpacity:0.5,
+        radius:initialRadius,
+        weight:3
+    }).addTo(map);
+
+    let startTime=null;
+    function step(timestamp){
+        if(!startTime) startTime=timestamp;
+        const progress=Math.min((timestamp-startTime)/duration,1);
+        const currentRadius = initialRadius + (maxRadius-initialRadius)*progress;
+
+        blastCircle.setRadius(currentRadius);
+        blastCircle.setStyle({ fillOpacity:0.5, weight:3 });
+
+        if(progress<1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+}
+
+// Convert Mt TNT to Hiroshima bombs
+function mtToHiroshima(mt){ return (mt*1000/15).toFixed(2); }
+
+// Show results
+function showResultsFromData(data){
+    const {size,speed,radius,lat,lon,energy,breakupStart,breakupAlt,residualV,airburst,crater,seismic,tsunami,damageLevel,levelClass,soundLevel} = data;
+    const distance=parseFloat(document.getElementById('distance').value);
+    const resultsDiv=document.getElementById('results');
+
+    // Layman-friendly energy
+    const energyText = `${energy} Mt TNT (~${mtToHiroshima(energy)} Hiroshima bombs)`;
+    const airburstText = `${airburst} Mt TNT (~${mtToHiroshima(airburst)} Hiroshima bombs)`;
+
+    // Damage description table
+    const soundTable = {
+        0:'No effect',10:'No effect',20:'No effect',30:'No effect',40:'No effect',50:'No effect',
+        60:'No effect',70:'May rattle light objects',80:'Glass/small items vibrate',90:'Thin glass may crack',
+        100:'Small unsecured items shift',110:'Windows vibrate',120:'Thin glass can shatter',130:'Glass shattering likely',
+        140:'Structural glass shatters',150:'Significant damage to lightweight buildings',
+        160:'Major structural damage to wood-frame buildings',170:'Heavy structural damage',
+        180:'Collapse of many building types',190:'Catastrophic urban-scale damage',194:'Near-total collapse',
+        200:'Total catastrophic structural failure',">200":'Landscape-level destruction'
+    };
+
+    // Find nearest dB level for damage description
+    let closestDB=0;
+    for(let db in soundTable){ if(soundLevel>=parseFloat(db)) closestDB=parseFloat(db);}
+    const damageDescription=soundTable[closestDB]||'Severe destruction';
+
+    resultsDiv.innerHTML=`
+        <h3>Simulation Results</h3>
+        <div class="result-card ${levelClass}">Damage Level: ${damageLevel}</div>
+        <p><strong>Asteroid Size:</strong> ${size} m</p>
+        <p><strong>Speed:</strong> ${speed} km/s</p>
+        <p><strong>Impact Location:</strong> Lat ${lat}, Lon ${lon}</p>
+        <p><strong>Distance from Impact:</strong> ${distance} km</p>
+        <p><strong>Estimated Blast Radius:</strong> ${(radius/1000).toFixed(1)} km</p>
+        <p><strong>Energy Before Atmospheric Entry:</strong> ${energyText}</p>
+        <p><strong>Breakup Starts At:</strong> ${breakupStart} km</p>
+        <p><strong>Breakup Altitude:</strong> ${breakupAlt} km</p>
+        <p><strong>Residual Velocity at Impact:</strong> ${residualV} km/s</p>
+        <p><strong>Energy of Airburst:</strong> ${airburstText}</p>
+        <p><strong>Crater Size (if formed):</strong> ${crater} km</p>
+        <p><strong>Seismic Effects (Richter magnitude):</strong> ${seismic}</p>
+        <p><strong>Probability of Tsunami:</strong> ${tsunami===1?'High (Ocean Impact)':'Low (Land Impact)'}</p>
+        <p><strong>Sound Level at Your Distance:</strong> ${soundLevel.toFixed(0)} dB</p>
+        <p><strong>Damage Description:</strong> ${damageDescription}</p>
+        <p><em>Note: This is a simplified model for educational purposes.</em></p>
+    `;
+    resultsDiv.style.display='block';
+}
+
+// Simulation calculation
+function simulateImpact(){
+    const size=parseFloat(document.getElementById('size').value);
+    const speed=parseFloat(document.getElementById('speed').value);
+    const angle=parseFloat(document.getElementById('angle').value);
+    const density=parseFloat(document.getElementById('density').value);
+    const lat=parseFloat(document.getElementById('lat').value);
+    const lon=parseFloat(document.getElementById('lon').value);
+    const distance=parseFloat(document.getElementById('distance').value);
+
+    originalSpeed=speed;
+
+    if(impactMarker) map.removeLayer(impactMarker);
+    if(blastCircle) map.removeLayer(blastCircle);
+    if(meteorLayer) map.removeLayer(meteorLayer);
+    document.getElementById('mitigate-btn').style.display='inline-block';
+    document.getElementById('mitigate-btn').textContent='Apply Mitigation';
+    document.getElementById('results').innerHTML='';
+    document.getElementById('results').style.display='none';
+
+    // Physics calculations (simplified but more realistic)
+    const radius_m=size/2;
+    const meteorDensity=3000; // kg/m^3
+    const volume=(4/3)*Math.PI*Math.pow(radius_m,3);
+    const mass=volume*meteorDensity;
+    const velocity=speed*1000;
+    const energy_j=0.5*mass*velocity*velocity; // Joules
+    const energy_mt=energy_j/4.184e15; // Mt TNT
+
+    const breakupStartAlt = 30*(speed/20)*Math.cos(angle*Math.PI/180);
+    const breakupAlt = breakupStartAlt*0.7;
+    const residualVelocity = velocity*0.7/1000;
+    const airburstEnergy = energy_mt*0.3;
+    const craterSize = 0.01*Math.pow(energy_mt,1/3); // km, simple estimate
+    const seismicEffect = Math.log10(energy_j)/1.5 - 3;
+    const tsunamiProb = (lat && lon && Math.random()>0.5 ? 1 : 0);
+    const blastRadius = size*1000; // meters
+
+    // Sound level at user distance (simplified)
+    const soundLevel = Math.min(220, 200 - 20*Math.log10(distance/blastRadius)); 
+
+    let damageLevel='Low', levelClass='low';
+    if(blastRadius>100000){ damageLevel='High'; levelClass='danger'; }
+    else if(blastRadius>50000){ damageLevel='Medium'; levelClass='medium'; }
+
+    currentResults={
+        size,speed,radius:blastRadius,lat,lon,energy:energy_mt.toFixed(2),
+        breakupStart:breakupStartAlt.toFixed(1),breakupAlt:breakupAlt.toFixed(1),
+        residualV:residualVelocity.toFixed(1),airburst:airburstEnergy.toFixed(2),
+        crater:craterSize.toFixed(2),seismic:seismicEffect.toFixed(2),
+        tsunami:tsunamiProb,damageLevel,levelClass,soundLevel
+    };
+
+    const approachDistance=1.5;
+    const startLat=lat-(approachDistance*Math.cos((90-angle)*Math.PI/180));
+    const startLon=lon-(approachDistance*Math.sin((90-angle)*Math.PI/180)*0.5);
+
+    map.setView([lat,lon],6);
+    animateMeteor(startLat,startLon,lat,lon);
+}
+
+// Apply mitigation by halving speed
+function applyMitigation(){
+    const speed=originalSpeed*0.5;
+    document.getElementById('speed').value=speed;
+    simulateImpact();
+}
+</script>
+</body>
+</html>
